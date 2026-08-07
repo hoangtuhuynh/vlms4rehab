@@ -89,6 +89,7 @@ Running ablations
 
 ## Citing vlms4rehab
 
+```text
 @article{10.1371/journal.pdig.0001506,
     doi = {10.1371/journal.pdig.0001506},
     author = {Li, Victor AND Kamalakannan, Naveenraj AND Parnandi, Avinash AND Schambra, Heidi AND Fernandez-Granda, Carlos},
@@ -102,3 +103,4 @@ Running ablations
     pages = {1-19},
     number = {7},
 }
+```
