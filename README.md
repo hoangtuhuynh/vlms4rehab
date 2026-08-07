@@ -89,12 +89,16 @@ Running ablations
 
 ## Citing vlms4rehab
 
-Coming soon.
-<!-- ```bibtex
-@article{li2025vlms4rehab,
-  title        = {The Potential and Limitations of Vision-Language Models for Human Motion Understanding: A Case Study in Data-Driven Stroke Rehabilitation},
-  author       = {Li, Victor and Kamalakannan, Naveen and Parnandi, Avinash and Schambra, Heidi and Fernandez-Granda, Carlos},
-  journal      = {XXX},
-  year         = {2025}
+@article{10.1371/journal.pdig.0001506,
+    doi = {10.1371/journal.pdig.0001506},
+    author = {Li, Victor AND Kamalakannan, Naveenraj AND Parnandi, Avinash AND Schambra, Heidi AND Fernandez-Granda, Carlos},
+    journal = {PLOS Digital Health},
+    publisher = {Public Library of Science},
+    title = {Vision-language models for human motion understanding: Lessons from stroke rehabilitation},
+    year = {2026},
+    month = {07},
+    volume = {5},
+    url = {https://doi.org/10.1371/journal.pdig.0001506},
+    pages = {1-19},
+    number = {7},
 }
-``` -->
