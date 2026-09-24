@@ -2,7 +2,7 @@
 
 **[ai@nyu](https://cims.nyu.edu/ai/areas/ai-for-healthcare-and-medicine/)**
 
-[[`Paper`](https:XXX)] [[`Project`](https://XXX)] [[`BibTeX`](#citing-vlms4rehab)]
+[[`Paper`](https://journals.plos.org/digitalhealth/article?id=10.1371/journal.pdig.0001506)] [[`Project`](https://vlms4rehab.github.io/vlms4rehab/)] [[`BibTeX`](#citing-vlms4rehab)]
 
 ![Fig1](assets/Fig1.png)
 
