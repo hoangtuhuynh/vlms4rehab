@@ -345,3 +345,18 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local sensor-data preprocessing outputs
+sensor_work/
+logs/
+
+# Patient metadata (rebuild with: python -m data.sensor.build_index)
+data/sensor/sensor_trials.csv
+
+# Reports, guides, and Word temp files
+*.docx
+~$*
+
+# Notebook outputs
+identification_cm_*.pdf
+postprocess/id/identification_executed.ipynb

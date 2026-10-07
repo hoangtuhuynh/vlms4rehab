@@ -47,6 +47,7 @@ AVAILABLE_MODELS = {
     "qwen2_5_vl_signal_generator": "Qwen2_5_VL_SignalGenerator",
     "qwen2_5_vl": "Qwen2_5_VL",
     "qwen2_5_vl_interleave": "Qwen2_5_VL_Interleave",
+    "qwen2_5_vl_sensor": "Qwen2_5_VL_Sensor",
     "qwen2_audio": "Qwen2_Audio",
     "qwen2_vl": "Qwen2_VL",
     "qwen_vl": "Qwen_VL",
