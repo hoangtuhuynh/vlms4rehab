@@ -13,6 +13,8 @@
 # Run from the repo root:
 #   sbatch data/sensor/delta/train_sensor_lora.sbatch image
 #   sbatch data/sensor/delta/train_sensor_lora.sbatch text
+#   sbatch data/sensor/delta/train_sensor_lora.sbatch image_text
+#   sbatch data/sensor/delta/train_sensor_lora.sbatch image_skeleton_text
 
 set -eo pipefail
 MODE=${1:-image}

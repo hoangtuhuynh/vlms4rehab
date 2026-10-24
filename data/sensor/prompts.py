@@ -56,11 +56,34 @@ _INPUT_DESCRIPTIONS = {
         "The table below lists wearable inertial-sensor recordings from a stroke patient performing one activity. "
         + TEXT_LEGEND
     ),
+    "image_text": (
+        "You get two views of the same wearable inertial-sensor recording from a stroke patient performing one activity. "
+        "The image plots every sample. Panels from top to bottom: paretic (affected) arm joint angles, non-paretic arm "
+        "joint angles, trunk flexion angles, and hand acceleration magnitude (gravity removed); the x-axis is time in seconds. "
+        "The table at the end lists key signals with exact values at regular time steps. "
+        + TEXT_LEGEND
+    ),
+    "image_skeleton_text": (
+        "You get three views of the same wearable inertial-sensor recording from a stroke patient performing one activity. "
+        "Image 1 plots every sample. Panels from top to bottom: paretic (affected) arm joint angles, non-paretic arm "
+        "joint angles, trunk flexion angles, and hand acceleration magnitude (gravity removed); the x-axis is time in seconds. "
+        "Image 2 shows stick figures of the body pose, reconstructed from the joint angles, at 16 evenly spaced times "
+        "(time above each figure). It is a schematic front view turned 30 degrees, so forward reach points right; "
+        "red = paretic arm, blue = non-paretic arm, black = trunk and head. "
+        "The table at the end lists key signals with exact values at regular time steps. "
+        + TEXT_LEGEND
+    ),
 }
+
+PLOT_MODES = {"image", "image_text", "image_skeleton_text"}
+SKELETON_MODES = {"image_skeleton_text"}
+TEXT_MODES = {"text", "image_text", "image_skeleton_text"}
 
 
 def build_prompt(mode: str = "image", style: str = "kinematic", sensor_text: str | None = None) -> str:
-    """mode: "image" or "text"; style: "plain" (video descriptions) or "kinematic" (sensor hints)."""
+    """mode: "image" (plot), "text" (table), "image_text" (plot + table) or
+    "image_skeleton_text" (plot + stick figures + table);
+    style: "plain" (video descriptions) or "kinematic" (sensor hints)."""
     classes = {
         name: f"{_PLAIN_CLASSES[name]} {_KINEMATIC_CLASSES[name]}" if style == "kinematic" else _PLAIN_CLASSES[name]
         for name in _PLAIN_CLASSES
@@ -72,8 +95,8 @@ def build_prompt(mode: str = "image", style: str = "kinematic", sensor_text: str
         "instructions": "Determine the main activity being performed by the patient. Choose the most fitting activity label from the list below. Always respond with an activity, even if uncertain.",
         "activity_classes": classes,
     }, indent=2)
-    if mode == "text":
+    if mode in TEXT_MODES:
         if sensor_text is None:
-            raise ValueError("text mode needs sensor_text")
+            raise ValueError(f"{mode} mode needs sensor_text")
         prompt += "\n\n" + sensor_text
     return prompt
