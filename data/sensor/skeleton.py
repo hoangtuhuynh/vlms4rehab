@@ -9,7 +9,8 @@ flexion, wrist extension, thoracic flexion) and drawn from a slightly oblique fr
 so hand height and forward reach are both visible. Segment lengths are generic and
 shoulder rotation is ignored, so it is a schematic, not a metric reconstruction.
 
-Usage (pre-render all strips next to the .npz files, or a few with --trials):
+Usage (pre-render all strips next to the .npz files, or a few with --trials;
+add --frames for one image per pose instead of one strip):
     python -m data.sensor.skeleton --data sensor_work/trials_25hz --jobs 8
 """
 
@@ -25,6 +26,9 @@ from data.sensor.preprocess import CHANNELS
 from data.sensor.render import load_trial
 
 SKELETON_DIR = "skeletons"
+FRAMES_DIR = "skeleton_frames"
+FRAME_COUNT = 64
+FRAME_SIZE_PX = 280  # a multiple of 28, so Qwen2.5-VL keeps it as 10 x 10 = 100 image tokens
 AFFECTED_COLOR = "#e41a1c"
 OTHER_COLOR = "#377eb8"
 
@@ -94,7 +98,7 @@ def pose(row: np.ndarray) -> dict:
     return {name: np.array([p[0] * math.cos(az) + p[1] * math.sin(az), p[2]]) for name, p in points.items()}
 
 
-def draw_pose(ax, joints: dict, title: str) -> None:
+def draw_pose(ax, joints: dict, title: str, lw: float = 2) -> None:
     from matplotlib.patches import Circle
 
     links = [("pelvis", "neck", "#222222")]
@@ -103,8 +107,8 @@ def draw_pose(ax, joints: dict, title: str) -> None:
                   (f"elbow_{arm}", f"wrist_{arm}", color), (f"wrist_{arm}", f"hand_{arm}", color)]
     for a, b, color in links:
         pts = np.stack([joints[a], joints[b]])
-        ax.plot(pts[:, 0], pts[:, 1], color=color, lw=2, solid_capstyle="round")
-    ax.add_patch(Circle(joints["head"], 0.22, fill=False, color="#222222", lw=1.5))
+        ax.plot(pts[:, 0], pts[:, 1], color=color, lw=lw, solid_capstyle="round")
+    ax.add_patch(Circle(joints["head"], 0.22, fill=False, color="#222222", lw=0.75 * lw))
     ax.set_xlim(-2.1, 2.7)
     ax.set_ylim(-0.2, 4.0)
     ax.set_aspect("equal")
@@ -136,12 +140,40 @@ def render_skeleton_strip(trial: dict, out_path: str, k: int = 16, cols: int = 8
     return out_path
 
 
+def render_skeleton_frames(trial: dict, out_paths: list, size_px: int = FRAME_SIZE_PX, dpi: int = 100) -> list:
+    """One image per pose, evenly spaced from the start to the end of the trial (len(out_paths) poses)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    k = len(out_paths)
+    t = trial["t"] - trial["t"][0]
+    for n, (path, i) in enumerate(zip(out_paths, np.linspace(0, len(t) - 1, k).round().astype(int)), start=1):
+        fig, ax = plt.subplots(figsize=(size_px / dpi, size_px / dpi), dpi=dpi)
+        draw_pose(ax, pose(trial["X"][i]), f"Pose {n}/{k}, t={t[i]:.1f}s", lw=4)
+        ax.title.set_fontsize(12)
+        fig.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.9)
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        fig.savefig(path)
+        plt.close(fig)
+    return out_paths
+
+
 def skeleton_path(data_dir: str, trial_id: str) -> str:
     return os.path.join(data_dir, SKELETON_DIR, f"{trial_id}.png")
 
 
+def skeleton_frame_paths(data_dir: str, trial_id: str, k: int = FRAME_COUNT) -> list:
+    return [os.path.join(data_dir, FRAMES_DIR, trial_id, f"pose_{n:02d}.png") for n in range(1, k + 1)]
+
+
 def _render_one(args):
-    data_dir, trial_id, overwrite = args
+    data_dir, trial_id, overwrite, frames = args
+    if frames:
+        outs = skeleton_frame_paths(data_dir, trial_id)
+        if overwrite or not all(os.path.exists(p) for p in outs):
+            render_skeleton_frames(load_trial(data_dir, trial_id), outs)
+        return outs[0]
     out = skeleton_path(data_dir, trial_id)
     if overwrite or not os.path.exists(out):
         render_skeleton_strip(load_trial(data_dir, trial_id), out)
@@ -154,13 +186,16 @@ def main():
     parser.add_argument("--trials", nargs="+", help="only these trial ids (default: all in trials.csv)")
     parser.add_argument("--jobs", type=int, default=8)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--frames", action="store_true",
+                        help=f"save {FRAME_COUNT} separate pose images per trial instead of one strip")
     args = parser.parse_args()
 
     trial_ids = args.trials or list(pd.read_csv(os.path.join(args.data, "trials.csv")).trial_id)
-    jobs = [(args.data, tid, args.overwrite) for tid in trial_ids]
+    jobs = [(args.data, tid, args.overwrite, args.frames) for tid in trial_ids]
     with ProcessPoolExecutor(args.jobs) as ex:
         n = sum(1 for _ in ex.map(_render_one, jobs, chunksize=8))
-    print(f"Rendered {n} stick-figure strips into {os.path.join(args.data, SKELETON_DIR)}")
+    what = f"sets of {FRAME_COUNT} pose images" if args.frames else "stick-figure strips"
+    print(f"Rendered {n} {what} into {os.path.join(args.data, FRAMES_DIR if args.frames else SKELETON_DIR)}")
 
 
 if __name__ == "__main__":

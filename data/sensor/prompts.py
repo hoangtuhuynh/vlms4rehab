@@ -9,6 +9,7 @@ durations and joint-angle patterns taken from the training split).
 import json
 
 from data.sensor.render import TEXT_LEGEND
+from data.sensor.skeleton import FRAME_COUNT
 
 ACTIVITY_NAMES = {
     "brushing": "Brushing",
@@ -73,16 +74,24 @@ _INPUT_DESCRIPTIONS = {
         "The table at the end lists key signals with exact values at regular time steps. "
         + TEXT_LEGEND
     ),
+    "poses": (
+        f"You get {FRAME_COUNT} images in time order from one wearable inertial-sensor recording of a stroke patient "
+        "performing one activity. Each image is a stick figure of the body pose at one moment, reconstructed from the "
+        "joint angles; the poses are evenly spaced from the start to the end of the recording, and the title of each "
+        "image gives its number and the time in seconds. It is a schematic front view turned 30 degrees, so forward "
+        "reach points right; red = paretic (affected) arm, blue = non-paretic arm, black = trunk and head."
+    ),
 }
 
 PLOT_MODES = {"image", "image_text", "image_skeleton_text"}
 SKELETON_MODES = {"image_skeleton_text"}
+POSE_MODES = {"poses"}
 TEXT_MODES = {"text", "image_text", "image_skeleton_text"}
 
 
 def build_prompt(mode: str = "image", style: str = "kinematic", sensor_text: str | None = None) -> str:
-    """mode: "image" (plot), "text" (table), "image_text" (plot + table) or
-    "image_skeleton_text" (plot + stick figures + table);
+    """mode: "image" (plot), "text" (table), "image_text" (plot + table),
+    "image_skeleton_text" (plot + stick figures + table) or "poses" (separate stick-figure images only);
     style: "plain" (video descriptions) or "kinematic" (sensor hints)."""
     classes = {
         name: f"{_PLAIN_CLASSES[name]} {_KINEMATIC_CLASSES[name]}" if style == "kinematic" else _PLAIN_CLASSES[name]

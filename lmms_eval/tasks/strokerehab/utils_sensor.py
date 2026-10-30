@@ -4,8 +4,9 @@ Activity identification from wearable-sensor data instead of video.
 Trials come from ``data/sensor/preprocess.py``; set ``STROKEREHAB_SENSOR_DIR`` to the
 preprocessed directory (default ``sensor_work/trials_25hz`` relative to the repo root).
 ``lmms_eval_specific_kwargs.mode`` selects the input: "image" (rendered plot),
-"text" (serialized table, no visual input), "image_text" (plot + table) or
-"image_skeleton_text" (plot + stick-figure strip + table).
+"text" (serialized table, no visual input), "image_text" (plot + table),
+"image_skeleton_text" (plot + stick-figure strip + table) or "poses" (separate
+stick-figure images only).
 """
 
 import os
@@ -14,9 +15,9 @@ from functools import partial
 import datasets
 import pandas as pd
 
-from data.sensor.prompts import ACTIVITY_NAMES, PLOT_MODES, SKELETON_MODES, TEXT_MODES, build_prompt
+from data.sensor.prompts import ACTIVITY_NAMES, PLOT_MODES, POSE_MODES, SKELETON_MODES, TEXT_MODES, build_prompt
 from data.sensor.render import load_trial, plot_path, render_plot, render_text
-from data.sensor.skeleton import render_skeleton_strip, skeleton_path
+from data.sensor.skeleton import render_skeleton_frames, render_skeleton_strip, skeleton_frame_paths, skeleton_path
 from lmms_eval.tasks.strokerehab.utils_identification import OutputToResultsFilter, _parse_final_answer  # noqa: F401
 
 SENSOR_DIR = os.environ.get("STROKEREHAB_SENSOR_DIR", os.path.join("sensor_work", "trials_25hz"))
@@ -54,6 +55,11 @@ def sr_sensor_doc_to_visual(doc, lmms_eval_specific_kwargs=None):
             if not os.path.exists(path):
                 render_fn(load_trial(SENSOR_DIR, doc["trial_id"]), path)
             images.append(path)
+    if mode in POSE_MODES:
+        paths = skeleton_frame_paths(SENSOR_DIR, doc["trial_id"])
+        if not all(os.path.exists(p) for p in paths):
+            render_skeleton_frames(load_trial(SENSOR_DIR, doc["trial_id"]), paths)
+        images.extend(paths)
     return images
 
 
