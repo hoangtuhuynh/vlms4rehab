@@ -11,7 +11,8 @@ ShareGPT/LLaMA-Factory style also read by ``data/sensor/train_lora.py``:
 Text-mode records have ``"images": []`` and the sensor table inside the prompt;
 image_text records have both the plot and the table; image_skeleton_text records have
 the plot and the stick-figure strip (in that order) plus the table; poses records have only
-the separate stick-figure images, in time order.
+the separate stick-figure images, in time order; poses_adaptive records are like poses, with a
+per-trial number of images (render them first with ``python -m data.sensor.skeleton --adaptive``).
 
 Usage:
     python -m data.sensor.export_sft --data sensor_work/trials_25hz --out sensor_work/sft
@@ -23,9 +24,10 @@ import os
 
 import pandas as pd
 
-from data.sensor.prompts import ACTIVITY_NAMES, PLOT_MODES, POSE_MODES, SKELETON_MODES, TEXT_MODES, build_prompt
+from data.sensor.prompts import (ACTIVITY_NAMES, ADAPTIVE_POSE_MODES, PLOT_MODES, POSE_MODES, SKELETON_MODES,
+                                 TEXT_MODES, build_prompt)
 from data.sensor.render import load_trial, plot_path, render_text
-from data.sensor.skeleton import skeleton_frame_paths, skeleton_path
+from data.sensor.skeleton import adaptive_frames, skeleton_frame_paths, skeleton_path
 
 IMAGE_TOKEN = "<image>"
 
@@ -34,7 +36,9 @@ def make_record(data_dir: str, row, mode: str, style: str) -> dict:
     images = [plot_path(data_dir, row.trial_id)] if mode in PLOT_MODES else []
     if mode in SKELETON_MODES:
         images.append(skeleton_path(data_dir, row.trial_id))
-    if mode in POSE_MODES:
+    if mode in ADAPTIVE_POSE_MODES:
+        images.extend(adaptive_frames(data_dir, row.trial_id))
+    elif mode in POSE_MODES:
         images.extend(skeleton_frame_paths(data_dir, row.trial_id))
     sensor_text = render_text(load_trial(data_dir, row.trial_id)) if mode in TEXT_MODES else None
     user = IMAGE_TOKEN * len(images) + build_prompt(mode, style, sensor_text)
@@ -52,7 +56,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data", default=os.path.join("sensor_work", "trials_25hz"))
     parser.add_argument("--out", default=os.path.join("sensor_work", "sft"))
-    parser.add_argument("--modes", default="image,text", help="comma-separated: image, text, image_text, image_skeleton_text, poses")
+    parser.add_argument("--modes", default="image,text", help="comma-separated: image, text, image_text, image_skeleton_text, poses, poses_adaptive")
     parser.add_argument("--prompt", default="kinematic", choices=["kinematic", "plain"])
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)

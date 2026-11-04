@@ -10,7 +10,8 @@ so hand height and forward reach are both visible. Segment lengths are generic a
 shoulder rotation is ignored, so it is a schematic, not a metric reconstruction.
 
 Usage (pre-render all strips next to the .npz files, or a few with --trials;
-add --frames for one image per pose instead of one strip):
+add --frames for one image per pose instead of one strip, or --adaptive for a per-trial
+number of pose images placed by arm motion):
     python -m data.sensor.skeleton --data sensor_work/trials_25hz --jobs 8
 """
 
@@ -29,6 +30,10 @@ SKELETON_DIR = "skeletons"
 FRAMES_DIR = "skeleton_frames"
 FRAME_COUNT = 64
 FRAME_SIZE_PX = 280  # a multiple of 28, so Qwen2.5-VL keeps it as 10 x 10 = 100 image tokens
+ADAPTIVE_FRAMES_DIR = "skeleton_frames_adaptive"
+MAX_FRAMES = 96  # 9,600 image tokens; about 17k tokens ran out of memory on a 40 GB A100
+FRAMES_PER_MOVEMENT = 4
+ARM_ANGLES = ["p_shoulderflexion_deg", "p_shoulderabduction_deg", "p_elbowflexion_deg", "p_wristextension_deg"]
 AFFECTED_COLOR = "#e41a1c"
 OTHER_COLOR = "#377eb8"
 
@@ -140,15 +145,43 @@ def render_skeleton_strip(trial: dict, out_path: str, k: int = 16, cols: int = 8
     return out_path
 
 
-def render_skeleton_frames(trial: dict, out_paths: list, size_px: int = FRAME_SIZE_PX, dpi: int = 100) -> list:
-    """One image per pose, evenly spaced from the start to the end of the trial (len(out_paths) poses)."""
+def arm_speed(trial: dict) -> np.ndarray:
+    """Smoothed angular speed (deg/s) of the paretic arm's four joint angles, one value per sample."""
+    from scipy.ndimage import uniform_filter1d
+
+    angles = np.nan_to_num(trial["X"][:, [CHANNELS.index(c) for c in ARM_ANGLES]])
+    speed = np.linalg.norm(np.diff(angles, axis=0), axis=1) / np.diff(trial["t"])
+    return uniform_filter1d(np.r_[0.0, speed], 7)
+
+
+def movement_frame_indices(trial: dict, min_k: int = FRAME_COUNT, max_k: int = MAX_FRAMES) -> np.ndarray:
+    """Sample indices for the adaptive pose images: FRAMES_PER_MOVEMENT per estimated movement,
+    clipped to [min_k, max_k], spaced by accumulated arm motion so moving stretches get more poses.
+
+    Each arm-speed peak (prominence 20 deg/s) counts as one movement; on this dataset that count
+    matches the labeled reach/transport/reposition primitives with a median ratio of 1.0."""
+    from scipy.signal import find_peaks
+
+    speed = arm_speed(trial)
+    movements = len(find_peaks(speed, prominence=20, distance=6)[0])
+    k = int(np.clip(FRAMES_PER_MOVEMENT * movements, min_k, max_k))
+    weight = speed + 0.25 * speed.mean() + 1e-6  # the constant part keeps still stretches from getting no poses
+    cum = np.r_[0.0, np.cumsum(weight)]
+    return np.searchsorted(cum / cum[-1], np.linspace(0, 1, k)).clip(0, len(speed) - 1)
+
+
+def render_skeleton_frames(trial: dict, out_paths: list, indices=None, size_px: int = FRAME_SIZE_PX,
+                           dpi: int = 100) -> list:
+    """One image per pose at the given sample indices (default: len(out_paths) evenly spaced poses)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     k = len(out_paths)
     t = trial["t"] - trial["t"][0]
-    for n, (path, i) in enumerate(zip(out_paths, np.linspace(0, len(t) - 1, k).round().astype(int)), start=1):
+    if indices is None:
+        indices = np.linspace(0, len(t) - 1, k).round().astype(int)
+    for n, (path, i) in enumerate(zip(out_paths, indices), start=1):
         fig, ax = plt.subplots(figsize=(size_px / dpi, size_px / dpi), dpi=dpi)
         draw_pose(ax, pose(trial["X"][i]), f"Pose {n}/{k}, t={t[i]:.1f}s", lw=4)
         ax.title.set_fontsize(12)
@@ -163,12 +196,24 @@ def skeleton_path(data_dir: str, trial_id: str) -> str:
     return os.path.join(data_dir, SKELETON_DIR, f"{trial_id}.png")
 
 
-def skeleton_frame_paths(data_dir: str, trial_id: str, k: int = FRAME_COUNT) -> list:
-    return [os.path.join(data_dir, FRAMES_DIR, trial_id, f"pose_{n:02d}.png") for n in range(1, k + 1)]
+def skeleton_frame_paths(data_dir: str, trial_id: str, k: int = FRAME_COUNT, frames_dir: str = FRAMES_DIR) -> list:
+    return [os.path.join(data_dir, frames_dir, trial_id, f"pose_{n:02d}.png") for n in range(1, k + 1)]
+
+
+def adaptive_frames(data_dir: str, trial_id: str, render: bool = False, overwrite: bool = False) -> list:
+    """Paths of a trial's adaptive pose images (their number depends on the trial); renders missing ones if asked."""
+    trial = load_trial(data_dir, trial_id)
+    indices = movement_frame_indices(trial)
+    paths = skeleton_frame_paths(data_dir, trial_id, len(indices), ADAPTIVE_FRAMES_DIR)
+    if render and (overwrite or not all(os.path.exists(p) for p in paths)):
+        render_skeleton_frames(trial, paths, indices)
+    return paths
 
 
 def _render_one(args):
     data_dir, trial_id, overwrite, frames = args
+    if frames == "adaptive":
+        return adaptive_frames(data_dir, trial_id, render=True, overwrite=overwrite)[0]
     if frames:
         outs = skeleton_frame_paths(data_dir, trial_id)
         if overwrite or not all(os.path.exists(p) for p in outs):
@@ -188,14 +233,18 @@ def main():
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--frames", action="store_true",
                         help=f"save {FRAME_COUNT} separate pose images per trial instead of one strip")
+    parser.add_argument("--adaptive", action="store_true",
+                        help=f"save {FRAME_COUNT}-{MAX_FRAMES} pose images per trial, placed by arm motion")
     args = parser.parse_args()
 
+    frames = "adaptive" if args.adaptive else args.frames
     trial_ids = args.trials or list(pd.read_csv(os.path.join(args.data, "trials.csv")).trial_id)
-    jobs = [(args.data, tid, args.overwrite, args.frames) for tid in trial_ids]
+    jobs = [(args.data, tid, args.overwrite, frames) for tid in trial_ids]
     with ProcessPoolExecutor(args.jobs) as ex:
         n = sum(1 for _ in ex.map(_render_one, jobs, chunksize=8))
-    what = f"sets of {FRAME_COUNT} pose images" if args.frames else "stick-figure strips"
-    print(f"Rendered {n} {what} into {os.path.join(args.data, FRAMES_DIR if args.frames else SKELETON_DIR)}")
+    what, out_dir = {"adaptive": ("sets of adaptive pose images", ADAPTIVE_FRAMES_DIR),
+                     True: (f"sets of {FRAME_COUNT} pose images", FRAMES_DIR)}.get(frames, ("stick-figure strips", SKELETON_DIR))
+    print(f"Rendered {n} {what} into {os.path.join(args.data, out_dir)}")
 
 
 if __name__ == "__main__":

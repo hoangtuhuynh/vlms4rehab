@@ -16,13 +16,14 @@
 #   sbatch data/sensor/delta/train_sensor_lora.sbatch image_text
 #   sbatch data/sensor/delta/train_sensor_lora.sbatch image_skeleton_text
 #   sbatch --time=12:00:00 data/sensor/delta/train_sensor_lora.sbatch poses
+#   sbatch --time=16:00:00 data/sensor/delta/train_sensor_lora.sbatch poses_adaptive
 
 set -eo pipefail
 MODE=${1:-image}
 BASE=${BASE:-Qwen/Qwen2.5-VL-7B-Instruct}
 OUT=sensor_work/lora/$(basename "$BASE" | tr '[:upper:].-' '[:lower:]__')_${MODE}
 # Pose images are 280x280; the default minimum (256*28*28) would upscale each to 448x448.
-if [ "$MODE" = "poses" ]; then MIN_PIXELS=$((280 * 280)); else MIN_PIXELS=$((256 * 28 * 28)); fi
+case "$MODE" in poses*) MIN_PIXELS=$((280 * 280)) ;; *) MIN_PIXELS=$((256 * 28 * 28)) ;; esac
 
 module load pytorch-conda/2.8
 eval "$(conda shell.bash hook)"
