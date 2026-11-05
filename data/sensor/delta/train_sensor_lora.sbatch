@@ -30,6 +30,7 @@ eval "$(conda shell.bash hook)"
 conda activate cvfm4rehab
 export STROKEREHAB_SENSOR_DIR=${STROKEREHAB_SENSOR_DIR:-sensor_work/trials_25hz}
 export MPLCONFIGDIR=${TMPDIR:-/tmp}/mpl
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 python -m data.sensor.train_lora \
   --train "sensor_work/sft/training_${MODE}.jsonl" \

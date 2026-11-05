@@ -62,6 +62,31 @@ class Collator:
         return inputs
 
 
+class AnswerLossTrainer(Trainer):
+    """Runs the LM head on the answer positions only. Full-sequence logits (tokens x 152k vocabulary, upcast
+    to fp32 for the loss) do not fit on a 40 GB GPU for ~10k-token inputs such as 96 pose images."""
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        labels = inputs.pop("labels")
+        keep = int((labels != -100).sum(dim=1).max()) + 1
+        hook = model.get_output_embeddings().register_forward_pre_hook(lambda _m, args: (args[0][:, -keep:],))
+        try:
+            outputs = model(**inputs)
+        finally:
+            hook.remove()
+        logits = outputs.logits[:, :-1].float()
+        targets = labels[:, -(keep - 1):].to(logits.device)
+        loss = torch.nn.functional.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1),
+                                                 ignore_index=-100, reduction="sum")
+        # Same scaling as the model's own loss: Trainer divides by gradient_accumulation_steps only when
+        # the model does not take num_items_in_batch.
+        if num_items_in_batch is not None and getattr(self, "model_accepts_loss_kwargs", False):
+            loss = loss / num_items_in_batch
+        else:
+            loss = loss / (targets != -100).sum()
+        return (loss, outputs) if return_outputs else loss
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--train", required=True)
@@ -89,7 +114,7 @@ def main():
     processor = AutoProcessor.from_pretrained(args.base, min_pixels=args.min_pixels, max_pixels=args.max_pixels)
     train_data = load_jsonl(args.train)
     total_steps = math.ceil(len(train_data) / args.grad_accum * args.epochs)
-    trainer = Trainer(
+    trainer = AnswerLossTrainer(
         model=model,
         args=TrainingArguments(
             output_dir=args.output_dir,
